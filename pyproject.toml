@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghcm"
+version = "0.1.0"
+description = "Generalized Hilbertian Covariate Measure CI Test."
+authors = [
+    { name = "Florin-Vlad Sabau", email = "florin.sabau@tum.de" }
+]
+readme = "README.md"
+dependencies = [
+"jax", 
+"diffrax", 
+"sigkerax",
+"networkx",
+]
+
+
+[project.optional-dependencies]
+dev = ["marimo", "matplotlib"]
+
+[tool.setuptools]
+packages = ["ghcm"]
+
