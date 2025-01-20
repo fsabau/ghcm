@@ -15,6 +15,9 @@ dependencies = [
 "diffrax", 
 "sigkerax",
 "networkx",
+"equinox",
+"frozendict",
+"tqdm",
 ]
 
 

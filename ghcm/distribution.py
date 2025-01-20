@@ -1,59 +1,129 @@
 from abc import ABC, abstractmethod
-from typing import Sequence
-from jax import Array
+from typing import Sequence, Tuple
 from jax.typing import ArrayLike
+from jax import Array
 import jax.numpy as jnp
 import jax.random as jrn
-from ghcm.typing import Key, Shape
+from ghcm.typing import Key, Shape, BinaryArray
+import equinox as eqnx
 
 class Distribution(ABC):
     @abstractmethod
-    def sample(self, key: Key, shape: Shape) -> tuple[Array, Key]:
+    def sample(self, key: Key) -> Array:
         pass
 
-class Uniform(Distribution): 
-    def __init__(self, minval: ArrayLike = 0, maxval: ArrayLike = 1):
-        self._minval = minval
-        self._maxval = maxval
-
-    def sample(self, key: Key, shape: Shape) -> Array:
-        key, subkey = jrn.split(key)
-        return jrn.uniform(subkey, shape, dtype=float, minval = self._minval, maxval=self._maxval)
-
-class DiracDelta(Distribution):
-    def __init__(self, value: ArrayLike):
-        self._value = value
+class Uniform(eqnx.Module, Distribution): 
+    minval: Array
+    maxval: Array
+    shape: Shape
     
+    def __init__(self, minval: ArrayLike, maxval: ArrayLike, shape: Shape | None = None):
+        minval = jnp.array(minval)
+        maxval = jnp.array(maxval)
+        if shape is None:
+            assert minval.shape == maxval.shape
+            shape = minval.shape
+        self.shape = shape
+        self.minval = minval
+        self.maxval = maxval
+
+    def sample(self, key: Key) -> Array:
+        key, subkey = jrn.split(key)
+        return jrn.uniform(subkey, self.shape, dtype=float, minval=self.minval, maxval=self.maxval)
+
+class DiracDelta(eqnx.Module, Distribution):
+    value: Array
+
+    def __init__(self, value: ArrayLike, shape: Shape | None = None):
+        if shape is None:
+            self.value = jnp.array(value)
+        else:
+            self.value = jnp.ones(shape) * value
+
     def sample(self, key: Array) -> Array:
-        return jnp.array(self._value)
+        return self.value
 
-class Bernoulli(Distribution):
-    def __init__(self, prob: ArrayLike = 0.5):
-        self._prob = prob
+class Bernoulli(eqnx.Module, Distribution):
+    prob: Array
+    shape: Shape
     
-    def sample(self, key: Key, shape: Shape) -> Array: 
-        key, subkey = jrn.split(key)
-        return jrn.bernoulli(subkey, self._prob, shape)
-
-class Normal(Distribution):
-    def __init__(self, mean: ArrayLike = 0.0, std: ArrayLike = 1.0):
-        self._mean = mean
-        self._std = std
+    def __init__(self, prob: ArrayLike, shape: Shape | None = None):
+        if shape is None:
+            shape = prob.shape
+        self.shape = shape
+        self.prob = jnp.array(prob)
     
-    def sample(self, key: Key, shape: Shape) -> Array:
+    def sample(self, key: Key) -> Array: 
         key, subkey = jrn.split(key)
-        return self._mean + self._std * jrn.normal(subkey, shape)
+        return jrn.bernoulli(subkey, self.prob, self.shape)
 
-class Mixture(Distribution):
-    def __init__(self, mixture: Sequence[Distribution], weights: Array | None = None):
-        self._mixture = mixture
-        self._weights = weights
+class Normal(eqnx.Module, Distribution):
+    mean: Array
+    std: Array
+    shape: Shape
+
+    def __init__(self, mean: ArrayLike, std: ArrayLike, shape: Shape | None = None):
+        if shape is None:
+            assert mean.shape == std.shape
+            shape = mean.shape
+        self.mean = jnp.array(mean)
+        self.std = jnp.array(std)
+        self.shape = shape
     
-    def sample(self, key: Key, shape: Shape) -> Array:
+    def sample(self, key: Key) -> Array:
         key, subkey = jrn.split(key)
+        return self.mean + self.std * jrn.normal(subkey, self.shape)
 
-        weights = jnp.ones(len(self._mixture)) if self._weights == None else self._weights
-        idx = jrn.categorical(subkey, weights)
+"""
+class Mixture(eqnx.Module, Distribution):
+    mixture: Sequence[Distribution]
+    weights: Array | None = None
+    shape: Shape
 
-        distr = self._mixture[idx]
-        return distr.sample(key, shape)
+    def __init__(self, mixture: Sequence[Distribution], weights: Array | None = None, shape: Shape | None = None)
+        if shape is None:
+            shape = mixture[0].shape
+            for dist in mixture:
+                assert shape == dist.shape
+        self.shape = shape
+        self.mixture = mixture
+        self.weights = weights
+
+    def sample(self, key: Key) -> Array:
+        key, cat_key, distr_key = jrn.split(key, 3)
+
+        weights = jnp.ones(len(self.mixture)) if self.weights == None else self.weights
+        idx = jrn.categorical(cat_key, weights)
+
+        distr = self.mixture[idx]
+        return distr.sample(distr_key)
+"""
+
+class DAGDistribution(ABC):
+    @abstractmethod
+    def sample_dag(self, key: Key) -> BinaryArray:
+        pass
+
+class ErdosRenyiDAG(eqnx.Module, DAGDistribution):
+    num_nodes: int
+    prob: float = 0.5
+    self_loops: bool = True
+
+    def sample_dag(self, key: Key) -> BinaryArray:
+        key, subkey = jrn.split(key)
+        full_adj = jrn.bernoulli(subkey, self.prob, (self.num_nodes, self.num_nodes))
+        dag_adj = jnp.tril(full_adj, 0 if self.self_loops else -1)
+
+        key, subkey = jrn.split(key)
+        dag_adj = jrn.permutation(subkey, dag_adj, 0)
+        dag_adj = jrn.permutation(subkey, dag_adj, 1)
+        return dag_adj
+
+class DiracDeltaDAG(eqnx.Module, DAGDistribution):
+    num_nodes: int
+    edge_list: Sequence[Tuple[int, int]]
+
+    def sample_dag(self, key: Key) -> BinaryArray:
+        adj = jnp.zeros((self.num_nodes, self.num_nodes), dtype=bool)
+        rows, cols = zip(*self.edge_list)
+        return adj.at[rows, cols].set(True).T
