@@ -108,9 +108,9 @@ class SDEGenerator(eqx.Module, StructuralCausalModel):
             drift_strength=params.drift_strength,
             batch_size=params.batch_size
         )
+    
 
     def causal_graph(self, key: Key) -> BinaryArray:
         key, dag_key = jrn.split(key)
         dag = self.adj.sample_dag(dag_key)
-        return dag 
-
+        return dag.T

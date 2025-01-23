@@ -74,30 +74,30 @@ class Normal(eqnx.Module, Distribution):
         key, subkey = jrn.split(key)
         return self.mean + self.std * jrn.normal(subkey, self.shape)
 
-"""
 class Mixture(eqnx.Module, Distribution):
     mixture: Sequence[Distribution]
-    weights: Array | None = None
     shape: Shape
 
-    def __init__(self, mixture: Sequence[Distribution], weights: Array | None = None, shape: Shape | None = None)
+    def __init__(self, mixture: Sequence[Distribution], shape: Shape | None = None):
         if shape is None:
             shape = mixture[0].shape
             for dist in mixture:
                 assert shape == dist.shape
         self.shape = shape
         self.mixture = mixture
-        self.weights = weights
 
     def sample(self, key: Key) -> Array:
         key, cat_key, distr_key = jrn.split(key, 3)
 
-        weights = jnp.ones(len(self.mixture)) if self.weights == None else self.weights
-        idx = jrn.categorical(cat_key, weights)
+        idx = jrn.categorical(cat_key, jnp.ones(len(self.mixture)), shape=self.shape)
 
-        distr = self.mixture[idx]
-        return distr.sample(distr_key)
-"""
+        sample = jnp.zeros(self.shape)        
+
+        distr_keys = jrn.split(distr_key, len(self.mixture))
+        for i, distr in enumerate(self.mixture):
+            sample = jnp.where(idx == i, distr.sample(distr_keys[i]), sample)
+
+        return sample
 
 class DAGDistribution(ABC):
     @abstractmethod

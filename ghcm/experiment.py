@@ -6,6 +6,8 @@ import jax.random
 from jax import Array
 import jax.numpy as jnp
 from frozendict import frozendict
+from typing import Callable
+import pickle
 
 
 class ExperimentLinearSDE:
@@ -33,10 +35,17 @@ class ExperimentLinearSDE:
         self.data_params = data_params
         self.ci_test = ci_test
         self.num_runs = num_runs
+        cache_dir.mkdir(exist_ok=True)
         self.cache_dir = cache_dir
 
     def run_experiment(self, seed: int = 123, reset_cache: bool = False) -> tuple[list[list[float]], list[frozendict]]:
-        # experiment_file = self.cache_dir / (self.name + '_' + str(seed))
+        experiment_file = self.cache_dir / (self.name + '_' + str(seed) + '.pkl')
+
+        if experiment_file.exists() and not reset_cache:
+            with experiment_file.open('rb') as f:
+                results, metadata = pickle.load(f)
+                return results, metadata
+
         results = []
         metadata = []
         for i, params in enumerate(self.data_params):
@@ -52,12 +61,16 @@ class ExperimentLinearSDE:
             meta = self.data_generator.metadata(params)
 
             test_keys = jax.random.split(test_key, self.num_runs)
-            p_values = jax.vmap(self.ci_test.ci_test, in_axes=0)(x, y, z, test_keys)
+            p_values = self.get_batched_ci_test()(x, y, z, test_keys)
 
             results.append(list(p_values))
             metadata.append(meta)
 
+        with experiment_file.open('wb') as f:
+            pickle.dump((results, metadata), f)
+
         return results, metadata
 
-
+    def get_batched_ci_test(self) -> Callable:
+        return jax.vmap(self.ci_test.ci_test, in_axes=0)
 

@@ -5,7 +5,7 @@ from ghcm.regression import RegressionMethod
 import jax.numpy as jnp
 import jax
 import abc
-from ghcm.typing import Key
+from ghcm.typing import Key, BinaryArray
 
 class CITest(abc.ABC):
     @classmethod
@@ -53,3 +53,10 @@ class GHCM(eqx.Module, CITest):
         normal_sample = jax.random.normal(key, shape=(self.mc_integration_sample_size, eigen_values.shape[-1]))
         S = (normal_sample**2) * eigen_values
         return jnp.mean(jnp.sum(S, axis=1) > test_statistic)
+
+def conditionally_independent(dag: BinaryArray) -> bool:
+    if dag[0, 1] or dag[1, 0]:
+        return False
+    if dag[0, 2] and dag[1, 2]:
+        return False
+    return True
