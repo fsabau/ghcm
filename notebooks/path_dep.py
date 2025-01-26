@@ -1,11 +1,11 @@
 import marimo
 
-__generated_with = "0.9.23"
+__generated_with = "0.10.17"
 app = marimo.App(width="medium")
 
 
 @app.cell
-def __():
+def _():
     from ghcm.regression import SigKernelRidgeRegression
     from ghcm.data import SDEGenerator, SDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Uniform, Normal, Mixture
@@ -15,6 +15,7 @@ def __():
     from ghcm.visualize import plot_sdes, plot_causal_dag
     import jax.random as jrn
     import jax.numpy as jnp
+    import jax
     return (
         DiracDelta,
         DiracDeltaDAG,
@@ -30,6 +31,7 @@ def __():
         Y,
         Z,
         conditionally_independent,
+        jax,
         jnp,
         jrn,
         plot_causal_dag,
@@ -38,12 +40,12 @@ def __():
 
 
 @app.cell
-def __(X, Y, Z):
+def _(X, Y, Z):
     import marimo as mo
 
     SEED = mo.cli_args().get("seed") or 123
-    BATCH_SIZE = mo.cli_args().get("batch_size") or 50
-    NUM_RUNS = mo.cli_args().get("num_runs") or 5
+    BATCH_SIZE = mo.cli_args().get("batch_size") or 64
+    NUM_RUNS = mo.cli_args().get("num_runs") or 3
     EDGE = mo.cli_args().get("edge") or ['XY', 'YZ']
 
     edges = list(map(lambda e: {
@@ -59,7 +61,7 @@ def __(X, Y, Z):
 
 
 @app.cell
-def __(
+def _(
     DiracDeltaDAG,
     Mixture,
     Normal,
@@ -109,14 +111,14 @@ def __(
 
 
 @app.cell
-def __(SEED, jnp, jrn):
+def _(SEED, jnp, jrn):
     key = jrn.key(SEED)
     ts = jnp.linspace(0, 1, 100)
     return key, ts
 
 
 @app.cell
-def __(conditionally_independent, generator, key, plot_causal_dag):
+def _(conditionally_independent, generator, key, plot_causal_dag):
     dag = generator.causal_graph(key)
     should_reject = not conditionally_independent(dag)
     plot_causal_dag(dag)
@@ -124,19 +126,28 @@ def __(conditionally_independent, generator, key, plot_causal_dag):
 
 
 @app.cell
-def __(SDEParams, generator, key, ts):
+def _(SDEParams, generator, key, ts):
     x, y, z = generator.generate_batch(key, ts, SDEParams(batch_size=100))
     return x, y, z
 
 
 @app.cell
-def __(plot_sdes, x, y, z):
+def _(plot_sdes, x, y, z):
     plot_sdes(x, y, z)
     return
 
 
 @app.cell
-def __(
+def _(jax, jnp):
+    from sdcit.test import SDCIT
+    from sigkerax.sigkernel import SigKernel
+    sigker = SigKernel(refinement_factor=4, static_kernel_kind="rbf", add_time=True)
+    sdci = SDCIT(lambda x, y: jax.vmap(sigker.kernel_matrix, in_axes=0)(jnp.array(x), jnp.array(y)).squeeze(-1))
+    return SDCIT, SigKernel, sdci, sigker
+
+
+@app.cell
+def _(
     BATCH_SIZE,
     ExperimentLinearSDE,
     GHCM,
@@ -145,6 +156,7 @@ def __(
     SigKernelRidgeRegression,
     edges_str,
     generator,
+    sdci,
 ):
     ghcm = GHCM(SigKernelRidgeRegression)
 
@@ -154,20 +166,20 @@ def __(
         data_params=[
             SDEParams(batch_size=BATCH_SIZE),
         ],
-        ci_test=ghcm,
+        ci_test=sdci,
         num_runs=NUM_RUNS,
     )
     return experiment, ghcm
 
 
 @app.cell
-def __(SEED, experiment):
+def _(SEED, experiment):
     results, metadata = experiment.run_experiment(seed=SEED, reset_cache=True)
     return metadata, results
 
 
 @app.cell
-def __(jnp, results, should_reject):
+def _(jnp, results, should_reject):
     p_values = jnp.array(results[0])
     mean = jnp.mean(p_values)
     std = jnp.std(p_values)
@@ -184,7 +196,7 @@ def __(jnp, results, should_reject):
 
 
 @app.cell
-def __():
+def _():
     return
 
 

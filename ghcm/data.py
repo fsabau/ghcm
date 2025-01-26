@@ -33,7 +33,7 @@ class SDE(eqx.Module):
         saveat = SaveAt(ts=ts)
 
         x0 = self.x0.sample(key)
-        sol = diffeqsolve(terms, solver, t0, t1, dt0, x0, saveat=saveat)
+        sol = diffeqsolve(terms, solver, t0, t1, dt0, x0, throw=False, saveat=saveat)
         return sol.ys
     
     def metadata(self) -> dict:
@@ -92,9 +92,9 @@ class SDEGenerator(eqx.Module, StructuralCausalModel):
         keys = jrn.split(path_key, params.batch_size)
 
         paths_batch = sde_batch(keys, ts)
-        x = paths_batch[:, :, 0]
-        y = paths_batch[:, :, 1]
-        z = paths_batch[:, :, 2]
+        x = paths_batch[:, :, 0:1]
+        y = paths_batch[:, :, 1:2]
+        z = paths_batch[:, :, 2:3]
         return x, y, z
     
     def metadata(self, params: SDEParams) -> frozendict:

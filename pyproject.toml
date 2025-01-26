@@ -10,19 +10,11 @@ authors = [
     { name = "Florin-Vlad Sabau", email = "florin.sabau@tum.de" }
 ]
 readme = "README.md"
-dependencies = [
-"jax", 
-"diffrax", 
-"sigkerax",
-"networkx",
-"equinox",
-"frozendict",
-"tqdm",
-]
-
+dynamic = ["dependencies"]
 
 [project.optional-dependencies]
 dev = ["marimo", "matplotlib"]
+cuda = ["jax[cuda]"]
 
 [tool.setuptools]
 packages = ["ghcm"]

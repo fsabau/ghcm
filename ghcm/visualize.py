@@ -11,6 +11,9 @@ Z_color = '#ff7f0e'
 def plot_sdes(x: Array, y: Array, z: Array, ts: Array | None = None, only_idx: int | None = None, alpha: float = 0.1):
     if ts is None:
         ts = jnp.linspace(0, 1, x.shape[1])
+    x = x[:, :, 0]
+    y = y[:, :, 0]
+    z = z[:, :, 0]
     if only_idx is not None: 
         plt.plot(ts, x[only_idx], color = X_color)
         plt.plot(ts, y[only_idx], color = Y_color)

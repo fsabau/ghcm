@@ -61,7 +61,7 @@ class ExperimentLinearSDE:
             meta = self.data_generator.metadata(params)
 
             test_keys = jax.random.split(test_key, self.num_runs)
-            p_values = self.get_batched_ci_test()(x, y, z, test_keys)
+            p_values = self.ci_test.vmapped_ci_test(x, y, z, test_keys)
 
             results.append(list(p_values))
             metadata.append(meta)
@@ -70,7 +70,4 @@ class ExperimentLinearSDE:
             pickle.dump((results, metadata), f)
 
         return results, metadata
-
-    def get_batched_ci_test(self) -> Callable:
-        return jax.vmap(self.ci_test.ci_test, in_axes=0)
 

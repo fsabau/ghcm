@@ -1,13 +1,13 @@
 import marimo
 
-__generated_with = "0.9.20"
+__generated_with = "0.9.23"
 app = marimo.App(width="medium")
 
 
 @app.cell
 def __():
     from ghcm.regression import SigKernelRidgeRegression
-    from ghcm.data import SDEGenerator
+    from ghcm.data import SDEGenerator, SDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Uniform
     from sigkerax.sigkernel import SigKernel
     import jax.numpy as jnp
@@ -17,6 +17,7 @@ def __():
         DiracDelta,
         DiracDeltaDAG,
         SDEGenerator,
+        SDEParams,
         SigKernel,
         SigKernelRidgeRegression,
         Uniform,
@@ -40,11 +41,11 @@ def __(DiracDelta, DiracDeltaDAG, SDEGenerator, Uniform):
 
 
 @app.cell
-def __(generator, jax, jnp):
+def __(SDEParams, generator, jax, jnp):
     key = jax.random.key(123)
     ts = jnp.array(jnp.linspace(0.0, 1.0, 200))
 
-    x, y, z = generator.generate_batch(key, ts, 250)
+    x, y, z = generator.generate_batch(key, ts, SDEParams(batch_size=100))
     return key, ts, x, y, z
 
 
@@ -59,6 +60,7 @@ def __(plt, ts, x, y, z):
     plt.plot(ts, x[9])
     plt.plot(ts, y[9])
     plt.plot(ts, z[9])
+    print(x.shape)
     return
 
 

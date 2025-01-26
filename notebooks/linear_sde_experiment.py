@@ -11,7 +11,7 @@ def __():
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Uniform, Normal, Mixture
     from ghcm.test import GHCM
     from ghcm.experiment import ExperimentLinearSDE
-    from ghcm.visualize import plot_p_values
+    from ghcm.visualize import plot_line_p_values
     return (
         DiracDelta,
         DiracDeltaDAG,
@@ -23,7 +23,7 @@ def __():
         SDEParams,
         SigKernelRidgeRegression,
         Uniform,
-        plot_p_values,
+        plot_line_p_values,
     )
 
 
