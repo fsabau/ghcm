@@ -8,12 +8,11 @@ import abc
 from ghcm.typing import Key, BinaryArray
 
 class CITest(abc.ABC):
-    @classmethod
     @abc.abstractmethod
     def ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> float:
         pass
 
-    @classmethod
+
     @abc.abstractmethod
     def vmapped_ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> list[float]:
         pass
@@ -22,6 +21,7 @@ class GHCM(eqx.Module, CITest):
     regression: type[RegressionMethod]
     mc_integration_sample_size: int = 100000
 
+    @eqx.filter_jit
     def ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> float:
         assert X.shape[0] == Y.shape[0] == Z.shape[0]
         n = X.shape[0] 
@@ -62,9 +62,13 @@ class GHCM(eqx.Module, CITest):
     def vmapped_ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> list[float]:
         return list(jax.vmap(self.ci_test, in_axes=0)(X, Y, Z, key))
 
-def conditionally_independent(dag: BinaryArray) -> bool:
+def conditionally_independent_sym(dag: BinaryArray, permutation: tuple[int, int, int] = (0, 1, 2)) -> bool:
+    dag = dag[permutation, :][:, permutation]
     if dag[0, 1] or dag[1, 0]:
         return False
     if dag[0, 2] and dag[1, 2]:
         return False
     return True
+
+def conditionally_independent_h_future_extended(structure: str, permutation: str) -> bool:
+    pass

@@ -1,13 +1,13 @@
 import marimo
 
-__generated_with = "0.9.20"
+__generated_with = "0.10.17"
 app = marimo.App(width="medium")
 
 
 @app.cell
-def __():
+def _():
     import marimo as mo
-    from ghcm.data import SDE, SDEGenerator
+    from ghcm.data import LinearSDE, LinearSDEGenerator, LinearSDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, ErdosRenyiDAG, Normal, Uniform
     from ghcm.typing import X,Y,Z
     import networkx as nx
@@ -18,9 +18,10 @@ def __():
         DiracDelta,
         DiracDeltaDAG,
         ErdosRenyiDAG,
+        LinearSDE,
+        LinearSDEGenerator,
+        LinearSDEParams,
         Normal,
-        SDE,
-        SDEGenerator,
         Uniform,
         X,
         Y,
@@ -34,28 +35,28 @@ def __():
 
 
 @app.cell
-def __(jax):
+def _(jax):
     key = jax.random.key(1728)
     return (key,)
 
 
 @app.cell
-def __(ErdosRenyiDAG, key, nx):
+def _(ErdosRenyiDAG, key, nx):
     adj = ErdosRenyiDAG(3, 0.5, True).sample_dag(key)
     G = nx.from_numpy_array(adj, create_using=nx.DiGraph)
     return G, adj
 
 
 @app.cell
-def __(G, nx, plt):
+def _(G, nx, plt):
     nx.draw_networkx(G)
     plt.gca()
     return
 
 
 @app.cell
-def __(DiracDelta, SDE, jnp):
-    sde = SDE(
+def _(DiracDelta, LinearSDE, jnp):
+    sde = LinearSDE(
         3,
         DiracDelta([-0.5, 0, 0.5]),
         jnp.array([[0.5, 0, 0], [1, -0.5, -1], [0, 0, 1]]),
@@ -67,40 +68,40 @@ def __(DiracDelta, SDE, jnp):
 
 
 @app.cell
-def __(jnp, key, sde):
+def _(jnp, key, sde):
     ts = jnp.array(jnp.linspace(0.0, 1.0, 100))
     paths = sde(key, ts)
     return paths, ts
 
 
 @app.cell
-def __(paths, plt, ts):
+def _(paths, plt, ts):
     plt.plot(ts, paths)
     return
 
 
 @app.cell
-def __(jax, key, sde):
+def _(jax, key, sde):
     sde_batched = jax.vmap(sde, in_axes=(0, None))
     keys = jax.random.split(key, 100)
     return keys, sde_batched
 
 
 @app.cell
-def __(keys, sde_batched, ts):
+def _(keys, sde_batched, ts):
     paths_batch = sde_batched(keys, ts)
     return (paths_batch,)
 
 
 @app.cell
-def __(paths_batch, plt, ts):
+def _(paths_batch, plt, ts):
     plt.plot(ts, paths_batch[14])
     return
 
 
 @app.cell
-def __(DiracDelta, DiracDeltaDAG, SDEGenerator, Uniform):
-    generator = SDEGenerator(
+def _(DiracDelta, DiracDeltaDAG, LinearSDEGenerator, Uniform):
+    generator = LinearSDEGenerator(
         adj = DiracDeltaDAG(3, [(0, 0), (0, 1), (0, 2), (1, 2)]), 
         x0 = DiracDelta([-0.5, 0, 0.5]),
         drift = Uniform(minval=1, maxval=2, shape=(3, 3)),
@@ -112,15 +113,15 @@ def __(DiracDelta, DiracDeltaDAG, SDEGenerator, Uniform):
 
 
 @app.cell
-def __(generator, key, ts):
-    x, y, z = generator.generate_batch(key, ts, 100)
+def _(LinearSDEParams, generator, key, ts):
+    x, y, z = generator.generate_batch(key, ts, params=LinearSDEParams(batch_size=100))
     dag = generator.causal_graph(key)
     dag
     return dag, x, y, z
 
 
 @app.cell
-def __(plt, ts, x, y, z):
+def _(plt, ts, x, y, z):
     plt.plot(ts, x[7])
     plt.plot(ts, y[7])
     plt.plot(ts, z[7])
@@ -128,7 +129,7 @@ def __(plt, ts, x, y, z):
 
 
 @app.cell
-def __():
+def _():
     return
 
 

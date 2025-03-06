@@ -6,9 +6,9 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
-    from ghcm.data import SDEGenerator, SDEParams
+    from ghcm.data import LinearSDEGenerator, LinearSDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Mixture, Uniform
-    from ghcm.test import conditionally_independent
+    from ghcm.test import conditionally_independent_sym
     from ghcm.visualize import plot_causal_dag, plot_sdes
     import jax.random as jrn
     import jax.numpy as jnp
@@ -16,11 +16,11 @@ def _():
     return (
         DiracDelta,
         DiracDeltaDAG,
+        LinearSDEGenerator,
+        LinearSDEParams,
         Mixture,
-        SDEGenerator,
-        SDEParams,
         Uniform,
-        conditionally_independent,
+        conditionally_independent_sym,
         jax,
         jnp,
         jrn,
@@ -39,8 +39,16 @@ def _(jax, jnp):
 
 
 @app.cell
-def _(DiracDelta, DiracDeltaDAG, Mixture, SDEGenerator, Uniform, jnp, jrn):
-    generator = SDEGenerator(
+def _(
+    DiracDelta,
+    DiracDeltaDAG,
+    LinearSDEGenerator,
+    Mixture,
+    Uniform,
+    jnp,
+    jrn,
+):
+    generator = LinearSDEGenerator(
         adj = DiracDeltaDAG(3, [(0, 0), (2, 1), (2, 0), (1, 1)]), 
         x0 = Uniform(-0.2, 0.2, shape=(3,)),
         drift = Mixture([Uniform(1, 2, shape=(3, 3)), Uniform(-2, -1, shape=(3,3))]),
@@ -54,16 +62,16 @@ def _(DiracDelta, DiracDeltaDAG, Mixture, SDEGenerator, Uniform, jnp, jrn):
 
 
 @app.cell
-def _(conditionally_independent, generator, key, plot_causal_dag):
+def _(conditionally_independent_sym, generator, key, plot_causal_dag):
     dag = generator.causal_graph(key)
-    should_reject = not conditionally_independent(dag)
+    should_reject = not conditionally_independent_sym(dag)
     plot_causal_dag(dag)
     return dag, should_reject
 
 
 @app.cell
-def _(SDEParams, generator, key, ts):
-    x, y, z = generator.generate_batch(key, ts, SDEParams(batch_size=64))
+def _(LinearSDEParams, generator, key, ts):
+    x, y, z = generator.generate_batch(key, ts, LinearSDEParams(batch_size=64))
     return x, y, z
 
 

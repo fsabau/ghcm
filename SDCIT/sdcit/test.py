@@ -8,12 +8,10 @@ Array = np.ndarray
 Key = Any
 
 class CITest(abc.ABC):
-    @classmethod
     @abc.abstractmethod
     def ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> float:
         pass
 
-    @classmethod
     @abc.abstractmethod
     def vmapped_ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> list[float]:
         pass

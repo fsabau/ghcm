@@ -117,7 +117,7 @@ class ErdosRenyiDAG(eqnx.Module, DAGDistribution):
         key, subkey = jrn.split(key)
         dag_adj = jrn.permutation(subkey, dag_adj, 0)
         dag_adj = jrn.permutation(subkey, dag_adj, 1)
-        return dag_adj
+        return dag_adj.T
 
 class DiracDeltaDAG(eqnx.Module, DAGDistribution):
     num_nodes: int

@@ -1,13 +1,13 @@
 import marimo
 
-__generated_with = "0.9.23"
+__generated_with = "0.10.17"
 app = marimo.App(width="medium")
 
 
 @app.cell
-def __():
+def _():
     from ghcm.regression import SigKernelRidgeRegression
-    from ghcm.data import SDEGenerator, SDEParams
+    from ghcm.data import LinearSDEGenerator, LinearSDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Uniform
     from sigkerax.sigkernel import SigKernel
     import jax.numpy as jnp
@@ -16,8 +16,8 @@ def __():
     return (
         DiracDelta,
         DiracDeltaDAG,
-        SDEGenerator,
-        SDEParams,
+        LinearSDEGenerator,
+        LinearSDEParams,
         SigKernel,
         SigKernelRidgeRegression,
         Uniform,
@@ -28,8 +28,8 @@ def __():
 
 
 @app.cell
-def __(DiracDelta, DiracDeltaDAG, SDEGenerator, Uniform):
-    generator = SDEGenerator(
+def _(DiracDelta, DiracDeltaDAG, LinearSDEGenerator, Uniform):
+    generator = LinearSDEGenerator(
         adj = DiracDeltaDAG(3, [(0, 0), (0, 1)]), 
         x0 = DiracDelta([0.0, -0.1, 0.0]),
         drift = Uniform(2, 3, shape=(3, 3)),
@@ -41,22 +41,22 @@ def __(DiracDelta, DiracDeltaDAG, SDEGenerator, Uniform):
 
 
 @app.cell
-def __(SDEParams, generator, jax, jnp):
+def _(LinearSDEParams, generator, jax, jnp):
     key = jax.random.key(123)
     ts = jnp.array(jnp.linspace(0.0, 1.0, 200))
 
-    x, y, z = generator.generate_batch(key, ts, SDEParams(batch_size=100))
+    x, y, z = generator.generate_batch(key, ts, LinearSDEParams(batch_size=100))
     return key, ts, x, y, z
 
 
 @app.cell
-def __(generator, key):
+def _(generator, key):
     print(generator.causal_graph(key))
     return
 
 
 @app.cell
-def __(plt, ts, x, y, z):
+def _(plt, ts, x, y, z):
     plt.plot(ts, x[9])
     plt.plot(ts, y[9])
     plt.plot(ts, z[9])
@@ -65,26 +65,26 @@ def __(plt, ts, x, y, z):
 
 
 @app.cell
-def __():
+def _():
     #sigker = SigKernel(refinement_factor=2, static_kernel_kind="rbf", add_time=True)
     #k = sigker.kernel_matrix(jnp.expand_dims(x, 2), jnp.expand_dims(x, 2))
     return
 
 
 @app.cell
-def __(SigKernelRidgeRegression, x, y):
+def _(SigKernelRidgeRegression, x, y):
     sigker_rr = SigKernelRidgeRegression(X_train=x, Y_train=y, reg_strength=1)
     return (sigker_rr,)
 
 
 @app.cell
-def __(sigker_rr, x):
+def _(sigker_rr, x):
     y_pred = sigker_rr.predict(x)
     return (y_pred,)
 
 
 @app.cell
-def __(plt, ts, x, y, y_pred):
+def _(plt, ts, x, y, y_pred):
     idx = 57
     plt.plot(ts, x[idx])
     plt.plot(ts, y_pred[idx])
@@ -93,28 +93,28 @@ def __(plt, ts, x, y, y_pred):
 
 
 @app.cell
-def __(y, y_pred):
+def _(y, y_pred):
     res = y - y_pred
     res.shape
     return (res,)
 
 
 @app.cell
-def __(jnp, res, z):
+def _(jnp, res, z):
     mse = jnp.mean(res * res, axis = 0)
     target_mse = jnp.mean(z * z, axis = 0)
     return mse, target_mse
 
 
 @app.cell
-def __(mse, plt, target_mse, ts):
+def _(mse, plt, target_mse, ts):
     plt.plot(ts, mse)
     plt.plot(ts, target_mse)
     return
 
 
 @app.cell
-def __():
+def _():
     return
 
 
