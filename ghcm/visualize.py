@@ -9,6 +9,8 @@ X_color = '#1f77b4'
 Y_color = '#2ca02c'
 Z_color = '#ff7f0e'
 
+colors = [X_color, Y_color, Z_color]
+
 def plot_sdes(x: Array, y: Array, z: Array, ts: Array | None = None, only_idx: int | None = None, alpha: float = 0.1, ax: Axes=None):
     if ax is None:
         fig, ax = plt.subplots()
@@ -26,11 +28,12 @@ def plot_sdes(x: Array, y: Array, z: Array, ts: Array | None = None, only_idx: i
     ax.plot(ts, z.T, color = Z_color, alpha=alpha)
     return ax
 
-def plot_causal_dag(adj: Array, ax: Axes = None) -> plt.Axes:
+def plot_causal_dag(adj: Array, permutation: tuple[int, int, int] = (0, 1, 2), ax: Axes = None) -> plt.Axes:
     if ax is None:
         fig, ax = plt.subplots()
+    x, y, z = permutation
     G = nx.from_numpy_array(adj, create_using=nx.DiGraph)
-    nx.draw_networkx(G, pos={0: [-0.5, 0.33], 1: [0.0, -0.33], 2: [0.5, 0.33]}, labels = {0: 'X', 1: 'Y', 2: 'Z'}, node_color=[X_color, Y_color, Z_color], ax=ax)
+    nx.draw_networkx(G, pos={x: [-0.5, 0.33], y: [0.0, -0.33], z: [0.5, 0.33]}, labels = {x: 'X', y: 'Y', z: 'Z'}, node_color=[colors[x], colors[y], colors[z]], ax=ax)
     return ax
 
 def plot_line_p_values(p_values: list[list[float]], metadata: list[dict], x_axis: Callable[[dict], float], ax: Axes=None) -> plt.Axes:

@@ -106,6 +106,7 @@ def _(TestType, X, Y, Z, get_ci_test):
 
 @app.cell
 def _(
+    DiracDelta,
     DiracDeltaDAG,
     LinearSDEGenerator,
     Mixture,
@@ -121,35 +122,26 @@ def _(
         x0 = Normal(0, 0.2, shape=(3,)),
         drift = Mixture([
             Uniform([
-                [-0.5, -2, -2],
-                [-2, -0.5, -2],
-                [-2, -2, -0.5],
-            ], [
-                [0.5, -1, -1],
-                [-1, 0.5, -1],
-                [-1, -1, 0.5],
-            ]),
-            Uniform([
-                [-0.5, 1, 1],
-                [1, -0.5, 1],
-                [1, 1, -0.5],
-            ], [
-                [0.5, 2, 2],
-                [2, 0.5, 2],
-                [2, 2, 0.5],
-            ])
-        ]),
-        drift_bias = Uniform(-0.1, 0.1, shape=(3,)),
-        diffusion = Uniform([
-                [-0.5, 0, 0],
-                [0, -0.5, 0],
-                [0, 0, -0.5],
-            ], [
                 [0.5, 0, 0],
                 [0, 0.5, 0],
                 [0, 0, 0.5],
+            ], [
+                [1, 0, 0],
+                [0, 1, 0],
+                [0, 0, 1],
+            ])
+        ]),
+        drift_bias = DiracDelta(0, shape=(3,)),
+        diffusion = Uniform([
+                [0, 1, 1],
+                [1, 0, 1],
+                [1, 1, 0],
+            ], [
+                [0, 2.5, 2.5],
+                [2.5, 0, 2.5],
+                [2.5, 2.5, 0],
             ]),
-        diffusion_bias = Uniform(-0.2, 0.2, shape=(3,))
+        diffusion_bias = DiracDelta(0, shape=(3,))
     )
     return (generator,)
 
@@ -157,7 +149,7 @@ def _(
 @app.cell
 def _(SEED, generator, jnp, jrn):
     key = jrn.key(SEED)
-    print(generator.drift.sample(key))
+    print(generator.diffusion.sample(key))
     ts = jnp.linspace(0, 1, 100)
     return key, ts
 
@@ -206,7 +198,7 @@ def _(
     test_type,
 ):
     experiment = ExperimentSDE(
-        name=f"drift_dep_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
+        name=f"diffusion_dep_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
         data_generator=generator,
         data_params=[
             LinearSDEParams(batch_size=BATCH_SIZE),

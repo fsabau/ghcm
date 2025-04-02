@@ -8,8 +8,8 @@ app = marimo.App(width="medium")
 def _():
     from ghcm.data import LinearSDEGenerator, LinearSDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Uniform, Normal, Mixture
-    from ghcm.test import GHCM, conditionally_independent
-    from ghcm.experiment import ExperimentSDE
+    from ghcm.test import GHCM
+    from ghcm.experiment import ExperimentSDE, conditionally_independent, TestType
     from ghcm.typing import X, Y, Z
     from ghcm.visualize import plot_sdes, plot_causal_dag
     import numpy as np
@@ -27,6 +27,7 @@ def _():
         LinearSDEParams,
         Mixture,
         Normal,
+        TestType,
         Uniform,
         X,
         Y,
@@ -44,43 +45,72 @@ def _():
 
 
 @app.cell
-def _(jax):
+def _(TestType, jax):
     from pathlib import Path
     cache_dir = Path('results/')
 
-    SEED = 123
+    SEED = 60
     BATCH_SIZE = 64
-    NUM_RUNS = 400
-    EDGES = [
-        ['XY', 'ZX'],
-        ['XY', 'ZY'],
-        ['XZ', 'YZ'],
-        ['XZ', 'ZY'],
-        ['YX', 'YZ'],
-        ['ZX', 'ZY'],
+    NUM_RUNS = 1000
+    STRUCTURES = [
+        'chain',
+        'fork',
+        'collider'
+    ]
+    PERMUTATIONS = [
+        'XYZ',
+        'XZY',
+        'YXZ',
+        'YZX',
+        'ZXY',
+        'ZYX'
     ]
     METHOD = ['ghcm', 'sdcit']
+    TYPE = 'future'
+
+    def str_to_test_type(type: str):
+        return {
+            'sym': TestType.SYM,
+            'future': TestType.FUTURE_EXTENDED
+        }[type]
+
     EXPERIMENT = 'drift_dep'
+
+    def permutation_str_to_tuple(perm: str) -> tuple:
+        return tuple(map(lambda c: ord(c) - ord('X'), perm))
+
 
     key = jax.random.key(SEED)
     return (
         BATCH_SIZE,
-        EDGES,
         EXPERIMENT,
         METHOD,
         NUM_RUNS,
+        PERMUTATIONS,
         Path,
         SEED,
+        STRUCTURES,
+        TYPE,
         cache_dir,
         key,
+        permutation_str_to_tuple,
+        str_to_test_type,
     )
 
 
 @app.cell
-def _(BATCH_SIZE, EXPERIMENT, NUM_RUNS, SEED, Tuple, cache_dir, pickle):
-    def get_filename(method: str, edges: list[str]) -> str:
-        edges_str = '_'.join(sorted(edges))
-        return f"{EXPERIMENT}_{method}_bs{BATCH_SIZE}_runs{NUM_RUNS}_{edges_str}_{SEED}.pkl"
+def _(
+    BATCH_SIZE,
+    EXPERIMENT,
+    NUM_RUNS,
+    SEED,
+    TYPE,
+    Tuple,
+    cache_dir,
+    pickle,
+):
+    def get_filename(method: str, structure: str, permutation: str) -> str:
+        return f"{EXPERIMENT}_{method}_{TYPE}_{structure}_{permutation}_bs{BATCH_SIZE}_runs{NUM_RUNS}_{SEED}.pkl"
 
     def load_file(name: str) -> Tuple[list[list[float]], list[dict]]:
         with (cache_dir / name).open('rb') as f:
@@ -91,71 +121,70 @@ def _(BATCH_SIZE, EXPERIMENT, NUM_RUNS, SEED, Tuple, cache_dir, pickle):
 
 @app.cell
 def _(
-    EDGES,
+    PERMUTATIONS,
+    TYPE,
     conditionally_independent,
     get_filename,
     key,
     load_file,
     np,
+    permutation_str_to_tuple,
     plot_causal_dag,
     plt,
+    str_to_test_type,
 ):
-    figs, axes = plt.subplots(nrows=2, ncols=3)
-    plt.subplots_adjust(hspace=1.3)
+    def plot_structure(structure):
 
-    for idx in range(6):
-        r,c = idx//3, idx % 3
-        edges = EDGES[idx]
-        ghcm_result, ghcm_metadata = load_file(get_filename('ghcm', edges))
-        ghcm_pvs = np.array(ghcm_result[0])
-        ghcm_mean, ghcm_std = np.mean(ghcm_pvs),np.std(ghcm_pvs)
+        figs, axes = plt.subplots(nrows=2, ncols=3)
+        plt.subplots_adjust(hspace=1.8)
 
-        sdci_result, sdci_metadata = load_file(get_filename('sdcit', edges))
-        sdci_pvs = np.array(sdci_result[0])
-        sdci_mean, sdci_std = np.mean(sdci_pvs),np.std(sdci_pvs)
+        for p_idx, perm in enumerate(PERMUTATIONS):
+            r, c = p_idx // 3, p_idx % 3
+            ghcm_result, ghcm_metadata = load_file(get_filename('ghcm', structure, perm))
+            ghcm_pvs = np.array(ghcm_result[0])
+            ghcm_mean, ghcm_std = np.mean(ghcm_pvs),np.std(ghcm_pvs)
 
-        graph = ghcm_metadata[0]['adj'].sample_dag(key).T
-        should_reject = not conditionally_independent(graph)
+            sdci_result, sdci_metadata = load_file(get_filename('sdcit', structure, perm))
+            sdci_pvs = np.array(sdci_result[0])
+            sdci_mean, sdci_std = np.mean(sdci_pvs),np.std(sdci_pvs)
 
-        if should_reject:
-            ghcm_error = np.mean(ghcm_pvs > 0.05)
-            sdci_error = np.mean(sdci_pvs > 0.05)
-            error_str = "type 1 error"
-        else:
-            ghcm_error = np.mean(ghcm_pvs < 0.05)
-            sdci_error = np.mean(sdci_pvs < 0.05)
-            error_str = f"type 2 error"
 
-        text = f"should reject: {should_reject}\nGHCM\np value: {ghcm_mean:.2f} +- {ghcm_std:.2f}\n{error_str}: {ghcm_error:.3f}\n\nSDCIT\np value: {sdci_mean:.2f} +- {sdci_std:.2f}\n{error_str}: {sdci_error:.3f}"
-        axes[r,c].set_xlabel(text)
+            graph = ghcm_metadata[0]['adj'].sample_dag(key).T
+            should_reject = not conditionally_independent(str_to_test_type(TYPE), graph, permutation_str_to_tuple(perm))
 
-        plot_causal_dag(graph, ax=axes[r,c])
+            if should_reject:
+                ghcm_error = np.mean(ghcm_pvs > 0.05)
+                sdci_error = np.mean(sdci_pvs > 0.05)
+                error_str = "type 1 error"
+            else:
+                ghcm_error = np.mean(ghcm_pvs < 0.05)
+                sdci_error = np.mean(sdci_pvs < 0.05)
+                error_str = f"type 2 error"
 
-    plt.show()
-    return (
-        axes,
-        c,
-        edges,
-        error_str,
-        figs,
-        ghcm_error,
-        ghcm_mean,
-        ghcm_metadata,
-        ghcm_pvs,
-        ghcm_result,
-        ghcm_std,
-        graph,
-        idx,
-        r,
-        sdci_error,
-        sdci_mean,
-        sdci_metadata,
-        sdci_pvs,
-        sdci_result,
-        sdci_std,
-        should_reject,
-        text,
-    )
+            text = f"null: {perm[0]} ⊥⊥ {perm[1]} | {perm[2]}\nshould reject: {should_reject}\n\nGHCM\np value: {ghcm_mean:.2f} +- {ghcm_std:.2f}\n{error_str}: {ghcm_error:.3f}\n\nSDCIT\np value: {sdci_mean:.2f} +- {sdci_std:.2f}\n{error_str}: {sdci_error:.3f}"
+            axes[r,c].set_xlabel(text)
+
+            plot_causal_dag(graph, ax=axes[r, c])
+        plt.show()
+    return (plot_structure,)
+
+
+@app.cell
+def _(plot_structure):
+    plot_structure('chain')
+    return
+
+
+@app.cell
+def _(plot_structure):
+    plot_structure('fork')
+    return
+
+
+@app.cell
+def _(plot_structure):
+    plot_structure('collider')
+    return
 
 
 @app.cell

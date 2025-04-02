@@ -4,6 +4,7 @@ from jax import Array
 from ghcm.regression import RegressionMethod
 import jax.numpy as jnp
 import jax
+import jax.lax
 import abc
 from ghcm.typing import Key, BinaryArray
 
@@ -60,15 +61,5 @@ class GHCM(eqx.Module, CITest):
         return jnp.mean(jnp.sum(S, axis=1) > test_statistic)
 
     def vmapped_ci_test(self, X: Array, Y: Array, Z: Array, key: Key) -> list[float]:
-        return list(jax.vmap(self.ci_test, in_axes=0)(X, Y, Z, key))
-
-def conditionally_independent_sym(dag: BinaryArray, permutation: tuple[int, int, int] = (0, 1, 2)) -> bool:
-    dag = dag[permutation, :][:, permutation]
-    if dag[0, 1] or dag[1, 0]:
-        return False
-    if dag[0, 2] and dag[1, 2]:
-        return False
-    return True
-
-def conditionally_independent_h_future_extended(structure: str, permutation: str) -> bool:
-    pass
+        packed_ci_test = lambda t: self.ci_test(t[0], t[1], t[2], t[3])
+        return list(jax.lax.map(packed_ci_test, (X, Y, Z, key), batch_size=100))

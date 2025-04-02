@@ -1,6 +1,6 @@
 from ghcm.data import StructuralCausalModel,  SDEParams
 from ghcm.test import CITest
-from ghcm.typing import Key
+from ghcm.typing import Key, BinaryArray
 from pathlib import  Path
 import jax.random
 from jax import Array
@@ -20,6 +20,48 @@ class TestParams:
     test_type: TestType = TestType.SYM
     future_pct: float = 0.5
     permutation: tuple[int, int, int] = (0, 1, 2)
+
+
+def conditionally_independent_sym(dag: BinaryArray, permutation: tuple[int, int, int] = (0, 1, 2)) -> bool:
+    dag = dag[permutation, :][:, permutation]
+    if dag[0, 1] or dag[1, 0]:
+        return False
+    if dag[0, 2] and dag[1, 2]:
+        return False
+    return True
+
+def conditionally_independent_h_future_extended(dag: BinaryArray, permutation: tuple[int, int, int] = (0, 1, 2)) -> bool:
+    structure = None
+    if dag[0, 1] and dag[1, 2]:
+        structure = 'chain'
+    if dag[1, 0] and dag[1, 2]:
+        structure = 'fork'
+    if dag[0, 1] and dag[2, 1]:
+        structure = 'collider'
+
+    if structure is None:
+        raise ValueError("DAG doesnt have one of the three forms: chain, fork, collider")
+    
+    return (structure, permutation) not in [
+        ('chain', (0, 1, 2)),
+        ('chain', (1, 2, 0)),
+        ('fork', (1, 0, 2)),
+        ('fork', (1, 2, 0)),
+        ('collider', (0, 1, 2)),
+        ('collider', (0, 2, 1)),
+        ('collider', (2, 0, 1)),
+        ('collider', (2, 1, 0))
+    ]
+
+def conditionally_independent(
+        test_type: TestType, 
+        dag: BinaryArray, 
+        permutation: tuple[int, int, int] = (0, 1, 2)
+        ) -> bool:
+    if test_type == TestType.SYM:
+        return conditionally_independent_sym(dag, permutation)
+    elif test_type == TestType.FUTURE_EXTENDED:
+        return conditionally_independent_h_future_extended(dag, permutation)
 
 class ExperimentSDE:
     name: str
@@ -56,7 +98,7 @@ class ExperimentSDE:
         vs = [x, y, z]
         idx = self.test_params.permutation
         x, y, z = vs[idx[0]], vs[idx[1]], vs[idx[2]]
-
+        # print(x.shape, y.shape, z.shape)
         if self.test_params.test_type == TestType.SYM:
             return self.ci_test.vmapped_ci_test(x, y, z, keys)
         elif self.test_params.test_type == TestType.FUTURE_EXTENDED:
@@ -70,7 +112,6 @@ class ExperimentSDE:
             
             y_past = jnp.pad(y_past, ((0, 0), (0, 0), (0, ts-idx), (0,0)), mode='edge')
 
-            print(y_past.shape, z_full.shape)
             cond = jnp.concat([y_past, z_full], axis=3)
 
             return self.ci_test.vmapped_ci_test(x_past, y_future, cond, keys)
@@ -90,6 +131,7 @@ class ExperimentSDE:
         results = []
         metadata = []
         for i, params in enumerate(self.data_params):
+            print(params)
             key = jax.random.key(seed + i)
             data_key, test_key = jax.random.split(key, 2)
 

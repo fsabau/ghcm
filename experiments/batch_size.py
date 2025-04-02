@@ -11,7 +11,7 @@ def _():
     from ghcm.test import GHCM
     from ghcm.experiment import ExperimentSDE, TestParams, TestType, conditionally_independent
     from ghcm.typing import X, Y, Z
-    from ghcm.visualize import plot_sdes, plot_causal_dag
+    from ghcm.visualize import plot_sdes, plot_causal_dag, plot_line_p_values
     import jax.random as jrn
     import jax.numpy as jnp
     import jax.lax
@@ -36,6 +36,7 @@ def _():
         jnp,
         jrn,
         plot_causal_dag,
+        plot_line_p_values,
         plot_sdes,
     )
 
@@ -59,7 +60,7 @@ def _(jax, jnp):
             from sigkerax.sigkernel import SigKernel
             sigker = SigKernel(refinement_factor=4, static_kernel_kind="rbf", add_time=True)
             packed_sigker = lambda t: sigker.kernel_matrix(t[0], t[1])
-            return SDCIT(lambda x, y: jax.lax.map(packed_sigker, (jnp.array(x), jnp.array(y)), batch_size=100).squeeze(-1))
+            return SDCIT(lambda x, y: jax.lax.map(packed_sigker, (jnp.array(x), jnp.array(y)), batch_size=16).squeeze(-1))
         else:
             raise Exception("Invalid CI test name")
     return (get_ci_test,)
@@ -69,11 +70,10 @@ def _(jax, jnp):
 def _(TestType, X, Y, Z, get_ci_test):
     import marimo as mo
 
-    SEED = mo.cli_args().get("seed") or 136
-    BATCH_SIZE = mo.cli_args().get("batch_size") or 32
-    NUM_RUNS = mo.cli_args().get("num_runs") or 3
-    STRUCTURE = mo.cli_args().get("structure") or 'chain'
-    PERMUTATION = mo.cli_args().get("permutation") or 'XYZ'
+    SEED = mo.cli_args().get("seed") or 180
+    NUM_RUNS = mo.cli_args().get("num_runs") or 128
+    STRUCTURE = mo.cli_args().get("structure") or 'fork'
+    PERMUTATION = mo.cli_args().get("permutation") or 'XZY'
     TEST_TYPE = mo.cli_args().get("type") or 'sym'
     METHOD = mo.cli_args().get("method") or 'ghcm'
 
@@ -89,7 +89,6 @@ def _(TestType, X, Y, Z, get_ci_test):
         'future': TestType.FUTURE_EXTENDED
     }[TEST_TYPE]
     return (
-        BATCH_SIZE,
         METHOD,
         NUM_RUNS,
         PERMUTATION,
@@ -134,7 +133,7 @@ def _(
                 [1, -0.5, 1],
                 [1, 1, -0.5],
             ], [
-                [0.5, 2, 2],
+                [0.5, -1, 2],
                 [2, 0.5, 2],
                 [2, 2, 0.5],
             ])
@@ -191,7 +190,6 @@ def _(plot_sdes, x, y, z):
 
 @app.cell
 def _(
-    BATCH_SIZE,
     ExperimentSDE,
     LinearSDEParams,
     METHOD,
@@ -206,10 +204,15 @@ def _(
     test_type,
 ):
     experiment = ExperimentSDE(
-        name=f"drift_dep_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
+        name=f"batch_size_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_runs{NUM_RUNS}",
         data_generator=generator,
         data_params=[
-            LinearSDEParams(batch_size=BATCH_SIZE),
+            LinearSDEParams(batch_size=16),
+            LinearSDEParams(batch_size=32),
+         #   LinearSDEParams(batch_size=64),
+         #   LinearSDEParams(batch_size=128),
+         #   LinearSDEParams(batch_size=256),
+         #   LinearSDEParams(batch_size=512),
         ],
         test_params=TestParams(
             test_type=test_type,
@@ -223,7 +226,7 @@ def _(
 
 @app.cell
 def _(SEED, experiment):
-    results, metadata = experiment.run_experiment(seed=SEED, reset_cache=True)
+    results, metadata = experiment.run_experiment(seed=SEED, reset_cache=False)
     return metadata, results
 
 
@@ -237,13 +240,19 @@ def _(
     results,
     should_reject,
 ):
-    p_values = jnp.array(results[0])
+    p_values = jnp.array(results[-3])
     mean = jnp.mean(p_values)
     std = jnp.std(p_values)
 
+    structure_graphic = {
+        'chain': "X -> Y -> Z",
+        'fork': "X <- Y -> Z",
+        'collider': "X -> Y <- Z"
+    }[STRUCTURE]
+
     print(f"CI test: {METHOD}")
     print(f"type: {TEST_TYPE}")
-    print(f"structure: {STRUCTURE}")
+    print(f"structure: {STRUCTURE} {structure_graphic}")
     print(f"null: {PERMUTATION[0]} ⊥⊥ {PERMUTATION[1]} | {PERMUTATION[2]}")
     print(f"p value: {mean} +- {std}")
     print(f"should reject: {should_reject}")
@@ -253,12 +262,15 @@ def _(
     else:
         error = jnp.mean(p_values < 0.05)
         print(f"type 2 error: {error}")
-    return error, mean, p_values, std
+    return error, mean, p_values, std, structure_graphic
 
 
 @app.cell
-def _():
-    return
+def _(jnp, metadata, plot_line_p_values, results):
+    import math
+    print(jnp.array(results[-2]))
+    plot_line_p_values(results, metadata, lambda meta: meta['batch_size'])
+    return (math,)
 
 
 @app.cell

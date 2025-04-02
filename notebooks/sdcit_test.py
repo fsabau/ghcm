@@ -8,7 +8,7 @@ app = marimo.App(width="medium")
 def _():
     from ghcm.data import LinearSDEGenerator, LinearSDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Mixture, Uniform
-    from ghcm.test import conditionally_independent_sym
+    from ghcm.experiment import conditionally_independent_sym
     from ghcm.visualize import plot_causal_dag, plot_sdes
     import jax.random as jrn
     import jax.numpy as jnp

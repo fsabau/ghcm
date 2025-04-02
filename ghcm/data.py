@@ -5,7 +5,7 @@ from jax import Array
 import jax
 from jax.typing import ArrayLike
 from ghcm.typing import Key, BinaryArray
-from ghcm.distribution import Distribution, DAGDistribution, DiracDelta
+from ghcm.distribution import Distribution, DAGDistribution, DiracDelta, DiracDeltaDAG
 from typing import Tuple, Callable
 from diffrax import VirtualBrownianTree, Euler, ODETerm, MultiTerm, ControlTerm, SaveAt, diffeqsolve
 import equinox as eqx
@@ -174,26 +174,26 @@ class PathDepSDE(eqx.Module, SDE):
 
         key, x0_key = jrn.split(key)
         x0 = DiracDelta(jnp.pad(self.x0.sample(x0_key), (0, num_edges)))
-        
         drift_fn = lambda t, x, args: drift @ x + drift_bias
         diffusion_fn = lambda t, x, args: jnp.diag(diffusion_bias)
 
         return self.sample_path(key, ts, int(self.total_dim), x0, drift_fn, diffusion_fn)
 
 class PathDepSDEGenerator(eqx.Module, StructuralCausalModel):
-    adj: BinaryArray
+    adj: DAGDistribution
     x0: Distribution
     drift: Distribution
     diffusion_bias: Distribution
 
     def generate_batch(self, key: Key, ts: Array, params: PathDepSDEParams) -> tuple[Array, Array, Array]:
-        dag = self.adj
+        key, dag_key = jrn.split(key, 2)
+        dag = self.adj.sample_dag(dag_key)
 
         key, drift_key, diff_bias_key, path_key = jrn.split(key, 4)
         drift = self.drift.sample(drift_key) * dag
         diffusion_bias = self.diffusion_bias.sample(diff_bias_key)
 
-        num_extra = jnp.count_nonzero(self.adj)
+        num_extra = jnp.count_nonzero(dag)
         total = 3 + num_extra
         sde = PathDepSDE(3, total, self.x0, drift, jnp.zeros(3), jnp.zeros((3, 3)), diffusion_bias)
         sde_batch = eqx.filter_vmap(sde, in_axes=(0, None))
@@ -207,9 +207,7 @@ class PathDepSDEGenerator(eqx.Module, StructuralCausalModel):
         return x, y, z
 
     def causal_graph(self, key: Key) -> BinaryArray:
-        key, dag_key = jrn.split(key)
-        dag = self.adj.sample_dag(dag_key)
-        return dag.T
+        return self.adj.sample_dag(key).T
 
     def metadata(self, params: PathDepSDEParams) -> frozendict:
         return frozendict(

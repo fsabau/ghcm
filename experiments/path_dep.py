@@ -6,7 +6,7 @@ app = marimo.App(width="medium")
 
 @app.cell
 def _():
-    from ghcm.data import LinearSDEGenerator, LinearSDEParams
+    from ghcm.data import PathDepSDEGenerator, PathDepSDEParams
     from ghcm.distribution import DiracDeltaDAG, DiracDelta, Uniform, Normal, Mixture
     from ghcm.test import GHCM
     from ghcm.experiment import ExperimentSDE, TestParams, TestType, conditionally_independent
@@ -21,10 +21,10 @@ def _():
         DiracDeltaDAG,
         ExperimentSDE,
         GHCM,
-        LinearSDEGenerator,
-        LinearSDEParams,
         Mixture,
         Normal,
+        PathDepSDEGenerator,
+        PathDepSDEParams,
         TestParams,
         TestType,
         Uniform,
@@ -69,11 +69,11 @@ def _(jax, jnp):
 def _(TestType, X, Y, Z, get_ci_test):
     import marimo as mo
 
-    SEED = mo.cli_args().get("seed") or 136
+    SEED = mo.cli_args().get("seed") or 146
     BATCH_SIZE = mo.cli_args().get("batch_size") or 32
     NUM_RUNS = mo.cli_args().get("num_runs") or 3
     STRUCTURE = mo.cli_args().get("structure") or 'chain'
-    PERMUTATION = mo.cli_args().get("permutation") or 'XYZ'
+    PERMUTATION = mo.cli_args().get("permutation") or 'XZY'
     TEST_TYPE = mo.cli_args().get("type") or 'sym'
     METHOD = mo.cli_args().get("method") or 'ghcm'
 
@@ -105,51 +105,31 @@ def _(TestType, X, Y, Z, get_ci_test):
 
 
 @app.cell
-def _(
-    DiracDeltaDAG,
-    LinearSDEGenerator,
-    Mixture,
-    Normal,
-    Uniform,
-    X,
-    Y,
-    Z,
-    edges,
-):
-    generator = LinearSDEGenerator(
-        adj = DiracDeltaDAG(3, [(X, X), (Y, Y), (Z, Z)] + edges), 
+def _(DiracDeltaDAG, Mixture, Normal, PathDepSDEGenerator, Uniform, edges):
+    generator = PathDepSDEGenerator(
+        adj = DiracDeltaDAG(3, edges), 
         x0 = Normal(0, 0.2, shape=(3,)),
         drift = Mixture([
             Uniform([
-                [-0.5, -2, -2],
-                [-2, -0.5, -2],
-                [-2, -2, -0.5],
+                [0, -9, -9],
+                [-9, 0, -9],
+                [-9, -9, 0],
             ], [
-                [0.5, -1, -1],
-                [-1, 0.5, -1],
-                [-1, -1, 0.5],
+                [0, -1, -1],
+                [-1, 0, -1],
+                [-1, -1, 0],
             ]),
             Uniform([
-                [-0.5, 1, 1],
-                [1, -0.5, 1],
-                [1, 1, -0.5],
+                [0, 1, 1],
+                [1, 0, 1],
+                [1, 1, 0],
             ], [
-                [0.5, 2, 2],
-                [2, 0.5, 2],
-                [2, 2, 0.5],
+                [0, 9, 9],
+                [9, 0, 9],
+                [9, 9, 0],
             ])
         ]),
-        drift_bias = Uniform(-0.1, 0.1, shape=(3,)),
-        diffusion = Uniform([
-                [-0.5, 0, 0],
-                [0, -0.5, 0],
-                [0, 0, -0.5],
-            ], [
-                [0.5, 0, 0],
-                [0, 0.5, 0],
-                [0, 0, 0.5],
-            ]),
-        diffusion_bias = Uniform(-0.2, 0.2, shape=(3,))
+        diffusion_bias = Uniform(0.1, 0.2, shape=(3,))
     )
     return (generator,)
 
@@ -178,8 +158,8 @@ def _(
 
 
 @app.cell
-def _(LinearSDEParams, generator, key, ts):
-    x, y, z = generator.generate_batch(key, ts, LinearSDEParams(batch_size=32))
+def _(PathDepSDEParams, generator, key, ts):
+    x, y, z = generator.generate_batch(key, ts, PathDepSDEParams(batch_size=32))
     return x, y, z
 
 
@@ -193,10 +173,10 @@ def _(plot_sdes, x, y, z):
 def _(
     BATCH_SIZE,
     ExperimentSDE,
-    LinearSDEParams,
     METHOD,
     NUM_RUNS,
     PERMUTATION,
+    PathDepSDEParams,
     STRUCTURE,
     TEST_TYPE,
     TestParams,
@@ -206,10 +186,10 @@ def _(
     test_type,
 ):
     experiment = ExperimentSDE(
-        name=f"drift_dep_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
+        name=f"path_dep_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
         data_generator=generator,
         data_params=[
-            LinearSDEParams(batch_size=BATCH_SIZE),
+            PathDepSDEParams(batch_size=BATCH_SIZE),
         ],
         test_params=TestParams(
             test_type=test_type,
@@ -254,11 +234,6 @@ def _(
         error = jnp.mean(p_values < 0.05)
         print(f"type 2 error: {error}")
     return error, mean, p_values, std
-
-
-@app.cell
-def _():
-    return
 
 
 @app.cell
