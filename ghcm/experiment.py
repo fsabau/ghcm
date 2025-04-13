@@ -10,6 +10,7 @@ from typing import Callable
 import pickle
 from enum import Enum
 from dataclasses import dataclass
+from functools import partial
 
 class TestType(Enum):
     SYM = 'sym'
@@ -115,6 +116,22 @@ class ExperimentSDE:
             cond = jnp.concat([y_past, z_full], axis=3)
 
             return self.ci_test.vmapped_ci_test(x_past, y_future, cond, keys)
+    
+    @staticmethod
+    @partial(jax.jit, static_argnames='size')
+    def linearly_interpolate_nan_data_1d(time_series: Array, size: int) -> Array:
+        time_series = time_series.squeeze()
+        xp = jnp.sort(jnp.argwhere(~jnp.isnan(time_series), size=size).squeeze())
+        fp = jnp.take(time_series, xp)
+        return jnp.expand_dims(jnp.interp(jnp.arange(size), xp, fp), 1)
+
+    @staticmethod
+    def linearly_interpolate_nan_data(time_series: Array, axis: int = 2) -> Array:
+        with_size = partial(ExperimentSDE.linearly_interpolate_nan_data_1d, size=time_series.shape[axis])
+        map_over_experiments = lambda x: jax.lax.map(with_size, x)
+        map_over_traj = lambda x: jax.lax.map(map_over_experiments, x)
+        return map_over_traj(time_series)
+
 
     def run_experiment(
             self,
@@ -131,7 +148,6 @@ class ExperimentSDE:
         results = []
         metadata = []
         for i, params in enumerate(self.data_params):
-            print(params)
             key = jax.random.key(seed + i)
             data_key, test_key = jax.random.split(key, 2)
 
@@ -141,6 +157,14 @@ class ExperimentSDE:
                 self.data_generator.generate_batch, 
                 in_axes=(0, None, None), 
                 )(data_keys, ts, params)
+
+
+            x = self.linearly_interpolate_nan_data(x)
+            y = self.linearly_interpolate_nan_data(y)
+            z = self.linearly_interpolate_nan_data(z)
+
+
+
             meta = self.data_generator.metadata(params)
             meta = meta | {'test_params': self.test_params}
 

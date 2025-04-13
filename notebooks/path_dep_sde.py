@@ -45,7 +45,7 @@ def _(
     Uniform,
 ):
     generator = PathDepSDEGenerator(
-        adj = DiracDeltaDAG(3, [(0, 0), (2, 1), (0, 1), (2, 2)]).sample_dag(1), 
+        adj = DiracDeltaDAG(3, [(0, 0), (2, 1), (0, 1), (2, 2)]), 
         x0 = DiracDelta([0.5, 0.0, -2.0]),
         drift = Mixture([Uniform(1.0, 1.2, shape=(3, 3)), Uniform(1.0, 1.2, shape=(3,3))]),
         diffusion_bias = DiracDelta([0.1, 0.1, 0.1]),
@@ -67,7 +67,7 @@ def _(
         name="path_dep_sde_batch",
         data_generator=generator,
         data_params=[
-            PathDepSDEParams(batch_size=32),
+            PathDepSDEParams(batch_size=32, drop_prob=0.1),
         ],
         test_params=TestParams(
             test_type=TestType.SYM
@@ -83,7 +83,7 @@ def _(PathDepSDEParams, generator, jnp, jrn):
     key = jrn.key(123)
     ts = jnp.linspace(0, 1, 100)
 
-    x, y, z = generator.generate_batch(key, ts, PathDepSDEParams(batch_size=32))
+    x, y, z = generator.generate_batch(key, ts, PathDepSDEParams(batch_size=32, drop_prob=0.5))
     return key, ts, x, y, z
 
 

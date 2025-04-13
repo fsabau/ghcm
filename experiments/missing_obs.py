@@ -11,7 +11,7 @@ def _():
     from ghcm.test import GHCM
     from ghcm.experiment import ExperimentSDE, TestParams, TestType, conditionally_independent
     from ghcm.typing import X, Y, Z
-    from ghcm.visualize import plot_sdes, plot_causal_dag
+    from ghcm.visualize import plot_sdes, plot_causal_dag, plot_line_p_values
     import jax.random as jrn
     import jax.numpy as jnp
     import jax.lax
@@ -36,15 +36,9 @@ def _():
         jnp,
         jrn,
         plot_causal_dag,
+        plot_line_p_values,
         plot_sdes,
     )
-
-
-@app.cell
-def _():
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots()
-    return ax, fig, plt
 
 
 @app.cell
@@ -69,13 +63,13 @@ def _(jax, jnp):
 def _(TestType, X, Y, Z, get_ci_test):
     import marimo as mo
 
-    SEED = mo.cli_args().get("seed") or 148
+    SEED = mo.cli_args().get("seed") or 136
     BATCH_SIZE = mo.cli_args().get("batch_size") or 32
     NUM_RUNS = mo.cli_args().get("num_runs") or 3
     STRUCTURE = mo.cli_args().get("structure") or 'chain'
     PERMUTATION = mo.cli_args().get("permutation") or 'XYZ'
     TEST_TYPE = mo.cli_args().get("type") or 'sym'
-    METHOD = mo.cli_args().get("method") or 'sdcit'
+    METHOD = mo.cli_args().get("method") or 'ghcm'
 
     edges = {
         'chain': [(X, Y), (Y, Z)],
@@ -106,7 +100,6 @@ def _(TestType, X, Y, Z, get_ci_test):
 
 @app.cell
 def _(
-    DiracDelta,
     DiracDeltaDAG,
     LinearSDEGenerator,
     Mixture,
@@ -119,29 +112,46 @@ def _(
 ):
     generator = LinearSDEGenerator(
         adj = DiracDeltaDAG(3, [(X, X), (Y, Y), (Z, Z)] + edges), 
-        x0 = Normal(0, 0.5, shape=(3,)),
-        drift = DiracDelta(0, shape=(3, 3)),
-        drift_bias = Mixture([
-            Uniform(0.6, 1.2, shape=(3,)),
-            Uniform(-1.2, -0.6, shape=(3,))
-        ]),
-        diffusion = Uniform([
-                [0, 1, 1],
-                [1, 0, 1],
-                [1, 1, 0],
+        x0 = Normal(0, 0.2, shape=(3,)),
+        drift = Mixture([
+            Uniform([
+                [-0.5, -2, -2],
+                [-2, -0.5, -2],
+                [-2, -2, -0.5],
             ], [
-                [0, 1.5, 1.5],
-                [1.5, 0, 1.5],
-                [1.5, 1.5, 0],
+                [0.5, -1, -1],
+                [-1, 0.5, -1],
+                [-1, -1, 0.5],
             ]),
-        diffusion_bias =  Uniform([-0.2, -0.2, -0.2], [0.2, 0.2, 0.2]),
+            Uniform([
+                [-0.5, 1, 1],
+                [1, -0.5, 1],
+                [1, 1, -0.5],
+            ], [
+                [0.5, 2, 2],
+                [2, 0.5, 2],
+                [2, 2, 0.5],
+            ])
+        ]),
+        drift_bias = Uniform(-0.1, 0.1, shape=(3,)),
+        diffusion = Uniform([
+                [-0.5, 0, 0],
+                [0, -0.5, 0],
+                [0, 0, -0.5],
+            ], [
+                [0.5, 0, 0],
+                [0, 0.5, 0],
+                [0, 0, 0.5],
+            ]),
+        diffusion_bias = Uniform(-0.2, 0.2, shape=(3,))
     )
     return (generator,)
 
 
 @app.cell
-def _(SEED, jnp, jrn):
+def _(SEED, generator, jnp, jrn):
     key = jrn.key(SEED)
+    print(generator.drift.sample(key))
     ts = jnp.linspace(0, 1, 100)
     return key, ts
 
@@ -163,13 +173,13 @@ def _(
 
 @app.cell
 def _(LinearSDEParams, generator, key, ts):
-    x, y, z = generator.generate_batch(key, ts, LinearSDEParams(batch_size=32))
+    x, y, z = generator.generate_batch(key, ts, LinearSDEParams(batch_size=32, drop_prob=0.5))
     return x, y, z
 
 
 @app.cell
 def _(plot_sdes, x, y, z):
-    plot_sdes(x, y, z, only_idx=12)
+    plot_sdes(x, y, z)
     return
 
 
@@ -190,10 +200,14 @@ def _(
     test_type,
 ):
     experiment = ExperimentSDE(
-        name=f"diffusion_dep_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
+        name=f"drift_dep_missing_{METHOD}_{TEST_TYPE}_{STRUCTURE}_{PERMUTATION}_bs{BATCH_SIZE}_runs{NUM_RUNS}",
         data_generator=generator,
         data_params=[
-            LinearSDEParams(batch_size=BATCH_SIZE),
+            LinearSDEParams(batch_size=BATCH_SIZE, drop_prob=0.0),
+            LinearSDEParams(batch_size=BATCH_SIZE, drop_prob=0.2),
+            LinearSDEParams(batch_size=BATCH_SIZE, drop_prob=0.4),
+            LinearSDEParams(batch_size=BATCH_SIZE, drop_prob=0.6),
+            LinearSDEParams(batch_size=BATCH_SIZE, drop_prob=0.8),
         ],
         test_params=TestParams(
             test_type=test_type,
@@ -212,36 +226,14 @@ def _(SEED, experiment):
 
 
 @app.cell
-def _(
-    METHOD,
-    PERMUTATION,
-    STRUCTURE,
-    TEST_TYPE,
-    jnp,
-    results,
-    should_reject,
-):
-    p_values = jnp.array(results[0])
-    mean = jnp.mean(p_values)
-    std = jnp.std(p_values)
-
-    print(f"CI test: {METHOD}")
-    print(f"type: {TEST_TYPE}")
-    print(f"structure: {STRUCTURE}")
-    print(f"null: {PERMUTATION[0]} ⊥⊥ {PERMUTATION[1]} | {PERMUTATION[2]}")
-    print(f"p value: {mean} +- {std}")
-    print(f"should reject: {should_reject}")
-    if should_reject:
-        error = jnp.mean(p_values > 0.05)
-        print(f"type 1 error: {error}")
-    else:
-        error = jnp.mean(p_values < 0.05)
-        print(f"type 2 error: {error}")
-    return error, mean, p_values, std
+def _(metadata, plot_line_p_values, results):
+    plot_line_p_values(results, metadata, x_axis=lambda meta: meta['drop_prob'])
+    return
 
 
 @app.cell
-def _():
+def _(should_reject):
+    print(should_reject)
     return
 
 

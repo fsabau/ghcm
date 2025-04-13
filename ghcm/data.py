@@ -15,8 +15,28 @@ from frozendict import frozendict
 
 class StructuralCausalModel(abc.ABC):
     @abc.abstractmethod
-    def generate_batch(self, key: Key, batch_size: int, **params) -> Tuple[Array, Array, Array]:
+    def generate_batch_full(self, key: Key, ts: Array, params) -> Tuple[Array, Array, Array]:
         pass
+
+    def generate_batch(self, key: Key, ts: Array, params) -> Tuple[Array, Array, Array]:
+        key, x_drop_key, y_drop_key, z_drop_key = jrn.split(key, 4)
+        x, y, z = self.generate_batch_full(key, ts, params)
+
+        drop_prob = params.drop_prob
+        x_drop = jax.random.bernoulli(x_drop_key, drop_prob, ts.shape).at[0].set(0).at[-1].set(0)
+        y_drop = jax.random.bernoulli(y_drop_key, drop_prob, ts.shape).at[0].set(0).at[-1].set(0)
+        z_drop = jax.random.bernoulli(z_drop_key, drop_prob, ts.shape).at[0].set(0).at[-1].set(0)
+
+        x_broadcast_drop = x_drop[None, :, None]
+        y_broadcast_drop = y_drop[None, :, None]
+        z_broadcast_drop = z_drop[None, :, None]
+
+        x = jnp.where(x_broadcast_drop, jnp.nan, x)
+        y = jnp.where(y_broadcast_drop, jnp.nan, y)
+        z = jnp.where(z_broadcast_drop, jnp.nan, z)
+
+        return x, y, z
+
 
     @abc.abstractmethod
     def causal_graph(self, key: Key) -> BinaryArray:
@@ -35,12 +55,13 @@ class SDE(abc.ABC):
             dim: int,
             x0: Distribution, 
             drift: Callable, 
-            diffusion: Callable) -> Array:
+            diffusion: Callable,
+            ) -> Array:
         t0 = ts[0]
         t1 = ts[-1]        
         dt0 = 0.002
 
-        key, bm_key = jrn.split(key)
+        key, bm_key, drop_key = jrn.split(key, 3)
         brownian_motion = VirtualBrownianTree(t0, t1, tol=1e-3, shape=(dim,), key=bm_key)
         terms = MultiTerm(ODETerm(drift), ControlTerm(diffusion, brownian_motion))
         solver = Euler()
@@ -53,6 +74,7 @@ class SDE(abc.ABC):
 @dataclass
 class SDEParams:
     batch_size: int
+    drop_prob: float = 0.0
 
 class LinearSDE(eqx.Module, SDE):
     dim: int
@@ -90,7 +112,7 @@ class LinearSDEGenerator(eqx.Module, StructuralCausalModel):
     diffusion: Distribution
     diffusion_bias: Distribution
 
-    def generate_batch(self, key: Key, ts: Array, params: LinearSDEParams) -> tuple[Array, Array, Array]:
+    def generate_batch_full(self, key: Key, ts: Array, params: LinearSDEParams) -> tuple[Array, Array, Array]:
         key, dag_key = jrn.split(key)
         dag = self.adj.sample_dag(dag_key)
 
@@ -126,7 +148,8 @@ class LinearSDEGenerator(eqx.Module, StructuralCausalModel):
             diffusion=self.diffusion,
             diffusion_bias=self.diffusion_bias,
             drift_strength=params.drift_strength,
-            batch_size=params.batch_size
+            batch_size=params.batch_size,
+            drop_prob=params.drop_prob
         )
     
 
@@ -185,7 +208,7 @@ class PathDepSDEGenerator(eqx.Module, StructuralCausalModel):
     drift: Distribution
     diffusion_bias: Distribution
 
-    def generate_batch(self, key: Key, ts: Array, params: PathDepSDEParams) -> tuple[Array, Array, Array]:
+    def generate_batch_full(self, key: Key, ts: Array, params: PathDepSDEParams) -> tuple[Array, Array, Array]:
         key, dag_key = jrn.split(key, 2)
         dag = self.adj.sample_dag(dag_key)
 
@@ -215,7 +238,8 @@ class PathDepSDEGenerator(eqx.Module, StructuralCausalModel):
             x0=self.x0,
             drift=self.drift,
             diffusion_bias=self.diffusion_bias,
-            batch_size=params.batch_size
+            batch_size=params.batch_size,
+            drop_prob=params.drop_prob
         )
 
 
